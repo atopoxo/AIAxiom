@@ -62,7 +62,7 @@ class JsonParser():
             print(f"读取文件时发生未知错误: {e}")
             return None
     
-    def parse(self, json_str: str, func = None, data = None, try_to_fix: bool = True) -> Union[str, Dict[Any, Any]]:
+    def parse(self, json_str: str, func = None, data = None, try_to_fix: bool = True) -> dict:
         try:
             json_str = json_str.replace("\t", "")
             return json.loads(json_str)
@@ -103,7 +103,7 @@ class JsonParser():
                     # This allows the AI to react to the error message,
                     #   which usually results in it correcting its ways.
                     log_mgr.error("Failed to fix AI output, telling the AI.")
-                    return json_str
+                    raise ValueError(f"Failed to parse JSON and fix failed: {json_str}")
             else:
                 raise e
 
