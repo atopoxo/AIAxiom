@@ -1,5 +1,5 @@
-from core.function.base_function import *
-from core.log_mgr.log import *
+from src.core.function.base_function import *
+from src.core.log_mgr.log import *
 
 @singleton
 class LogMgr(LoggerShell):

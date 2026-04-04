@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from src.core.json.json_parser import get_json_parser
 
@@ -16,16 +17,19 @@ class TaskMgr:
         path = self.dir / f"task_{task_id}.json"
         if not path.exists():
             raise ValueError(f"Task {task_id} not found")
-        result = self.json_parser.parse(path.read_text())
-        if isinstance(result, str):
-            # 如果是字符串，尝试解析为JSON
-            import json
-            return json.loads(result)
+        result = self.json_parser.read_json_file(path)
+        if result is None:
+            # 如果read_json_file失败，尝试使用parse方法
+            result = self.json_parser.parse(path.read_text())
+            if isinstance(result, str):
+                # 如果是字符串，尝试解析为JSON
+                return json.loads(result)
         return result
     
     def _save(self, task: dict):
         path = self.dir / f"task_{task['id']}.json"
-        path.write_text(self.json_parser.to_json_str(task, indent=2))
+        json_str = self.json_parser.to_json_str(task, indent=2)
+        path.write_text(json_str, encoding='utf-8')
 
     def create(self, subject: str, description: str = "") -> str:
         task = {
@@ -65,10 +69,12 @@ class TaskMgr:
     
     def _clear_dependency(self, completed_id: int):
         for f in self.dir.glob("task_*.json"):
-            task = self.json_parser.parse(f.read_text())
-            if isinstance(task, str):
-                import json
-                task = json.loads(task)
+            task = self.json_parser.read_json_file(f)
+            if task is None:
+                # 如果read_json_file失败，尝试使用parse方法
+                task = self.json_parser.parse(f.read_text())
+                if isinstance(task, str):
+                    task = json.loads(task)
             if completed_id in task.get("blocked_by", []):
                 task["blocked_by"].remove(completed_id)
                 self._save(task)
@@ -76,10 +82,12 @@ class TaskMgr:
     def list_all(self) -> str:
         tasks = []
         for f in sorted(self.dir.glob("task_*.json")):
-            task = self.json_parser.parse(f.read_text())
-            if isinstance(task, str):
-                import json
-                task = json.loads(task)
+            task = self.json_parser.read_json_file(f)
+            if task is None:
+                # 如果read_json_file失败，尝试使用parse方法
+                task = self.json_parser.parse(f.read_text())
+                if isinstance(task, str):
+                    task = json.loads(task)
             tasks.append(task)
         if not tasks:
             return "No tasks."
