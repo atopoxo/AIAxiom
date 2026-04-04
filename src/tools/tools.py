@@ -326,20 +326,21 @@ CHILD_TOOLS = [
     }
 ]
 
-PARENT_TOOLS = CHILD_TOOLS + [
-    {
-        "type": "function",
-        "function": {
-            "name": "task", 
-            "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
-            "parameters": {
-                "type": "object", 
-                "properties": {
-                    "prompt": {"type": "string"}, 
-                    "description": {"type": "string", "description": "Short description of the task"}
-                }, 
-                "required": ["prompt"]
-            }
-        }
-    }
-]
+PARENT_TOOLS = CHILD_TOOLS
+# [
+#     {
+#         "type": "function",
+#         "function": {
+#             "name": "task", 
+#             "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
+#             "parameters": {
+#                 "type": "object", 
+#                 "properties": {
+#                     "prompt": {"type": "string"}, 
+#                     "description": {"type": "string", "description": "Short description of the task"}
+#                 }, 
+#                 "required": ["prompt"]
+#             }
+#         }
+#     }
+# ]

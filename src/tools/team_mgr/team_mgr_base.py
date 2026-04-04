@@ -55,6 +55,7 @@ class TeamMgrBase(ModelOperator):
             for tool_call in message["tool_calls"]:
                 arguments = self.json_parser.parse(tool_call["arguments"])
                 output = self._exec(name, tool_call["name"], arguments)
+                print(output)
                 tool_results.append({
                     "role": "tool",
                     "tool_call_id": tool_call["id"],

@@ -35,7 +35,7 @@ class SystemTools(SystemToolsBase):
         
     def run_read(self, path: str, limit: int | None = None) -> str:
         try:
-            text = self.__safe_path(path).read_text()
+            text = self._safe_path(path).read_text()
             lines = text.splitlines()
             if limit and limit < len(lines):
                 lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
@@ -45,7 +45,7 @@ class SystemTools(SystemToolsBase):
         
     def run_write(self, path: str, content: str) -> str:
         try:
-            fp = self.__safe_path(path)
+            fp = self._safe_path(path)
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content)
             return f"Wrote {len(content)} bytes to {path}"

@@ -4,7 +4,7 @@ from core.json.json_parser import get_json_parser
 
 class MsgBus:
     def __init__(self, work_dir: Path):
-        self.work_dir = work_dir
+        self.work_dir = work_dir / ".team"
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.json_parser = get_json_parser()
         self.valid_msg_types = {
@@ -44,7 +44,8 @@ class MsgBus:
             msg.update(extra)
         inbox_path = self.work_dir / f"{to}.jsonl"
         with open(inbox_path, "a") as f:
-            f.write(self.json_parser.to_json_str(msg) + "\n")
+            json_line = self.json_parser.to_json_str(msg, indent=0)
+            f.write(json_line + "\n")
         return f"Sent {msg_type} to {to}"
     
     def read_inbox(self, name: str) -> list:

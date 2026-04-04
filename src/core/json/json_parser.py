@@ -159,7 +159,12 @@ class JsonParser():
         return result
     
     def to_json_str(self, data, ensure_ascii=False, cls=DateTimeEncoder, indent=0):
-        return json.dumps(data, ensure_ascii=ensure_ascii, cls=cls, indent=indent)
+        if indent == 0:
+            # 使用紧凑格式，确保生成单行JSON
+            return json.dumps(data, ensure_ascii=ensure_ascii, cls=cls, 
+                             indent=None, separators=(',', ':'))
+        else:
+            return json.dumps(data, ensure_ascii=ensure_ascii, cls=cls, indent=indent)
     
     def write_to_file(self, data, file_path, ensure_ascii=False, cls=DateTimeEncoder, indent=0, encoding='utf-8'):
         json_str = self.to_json_str(data, ensure_ascii=ensure_ascii, cls=cls, indent=indent)
