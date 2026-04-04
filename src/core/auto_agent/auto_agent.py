@@ -1,61 +1,29 @@
 from typing import Any
 from core.model.base.model_base import ModelBase
 from core.json.json_parser import get_json_parser
-from tools.tools import TOOL_HANDLERS, CHILD_TOOLS, PARENT_TOOLS
+from tools.tools import TOOL_HANDLERS, CHILD_TOOLS, PARENT_TOOLS, BG, BUS
 from core.context_compress.context_compress import ContextCompression
+from core.auto_agent.auto_agent_base import AutoAgentBase
 
-class AutoAgent:
+class AutoAgent(AutoAgentBase):
     def __init__(self):
-        self.model = None
-        self.model_name = None
-        self.json_parser = get_json_parser()
-
-    def _is_finish(self, message: str, is_subagent: bool = False):
-        if is_subagent:
-            return "<<<-subagent-done->>>" in message["conclusion"]
-        else:
-            return "<<<-done->>>" in message["conclusion"]
-    
-    def _get_subagent_data(self, sub_tools: list, prompt: str) -> Any:
-        history = []
-        history.append({"role": "system", "content": self.get_subagent_prompt()})
-        history.append({"role": "user", "content": prompt})
-        data = {
-            "model_name": self.get_model_name(),
-            "messages": history,
-            "stream": True,
-            "max_tokens": 8000,
-            "index": -1,
-            "tools": sub_tools,
-            "tool_choice": "auto",
-            "extra": {},
-        }
-        return data
+        super().__init__()
     
     def run_subagent(self, model: ModelBase, sub_tools: list, prompt: str) -> str:
         data = self._get_subagent_data(sub_tools=sub_tools, prompt=prompt)
         messages = data["messages"]
-        stream = data["stream"]
         rounds_since_todo = 0
         for _ in range(30):  # safety limit
             self.context_compress.compress(messages)
-            response = model.get_response(data=data)
-            message = {
-                "reasoning": "",
-                "conclusion": "",
-                "tool_calls": []
-            }
-            if stream:
-                for chunk in response:
-                    model.message_update(message, stream, chunk=chunk)
-            else:
-                message = model.message_update(message, stream, chunk=response)
+            message = self.get_model_result(data)
+            if not message:
+                continue
             messages.append({
                 "role": "assistant", 
                 "content": message["conclusion"],
-                "tool_calls": message["tool_calls"]
+                "tool_calls": message["raw_tool_calls"]
             })
-            if self._is_finish(message, is_subagent=True):
+            if self.is_finish(message, is_subagent=True):
                 break
 
             tool_results = []
@@ -69,7 +37,7 @@ class AutoAgent:
                 else:
                     handler = TOOL_HANDLERS.get(tool_call["name"])
                     output = handler(**arguments) if handler else f"Unknown tool: {tool_call['name']}"
-                print(output[:200])
+                print(output)
                 
                 tool_results.append({
                     "role": "tool",
@@ -87,18 +55,6 @@ class AutoAgent:
                 print("[manual compact]")
                 messages[:] = self.context_compressauto_compact(messages)
         return messages[-1]["content"] if messages[-1]["role"] == "assistant" else "(no summary)"
-    
-    def set_model(self, model: ModelBase):
-        self.model = model
-
-    def get_model(self) -> ModelBase:
-        return self.model
-
-    def get_model_name(self) -> str:
-        return self.model_name
-
-    def set_model_name(self, model_name: str):
-        self.model_name = model_name
 
     def set_subagent_prompt(self, prompt: str):
         self.subagent_prompt = prompt
@@ -117,28 +73,20 @@ class AutoAgent:
         data["model_name"] = self.get_model_name()
         model = self.get_model()
         messages = data["messages"]
-        stream = data["stream"]
         data["tools"] = PARENT_TOOLS
         while True:
+            BG.publish_notifications(messages)
+            BUS.publish_inbox_messages("lead", messages)
             self.context_compress.compress(messages)
-            response = model.get_response(data=data)
-            message = {
-                "reasoning": "",
-                "conclusion": "",
-                "tool_calls": [],
-                "raw_tool_calls": []
-            }
-            if stream:
-                for chunk in response:
-                    model.message_update(message, stream, chunk=chunk)
-            else:
-                model.message_update(message, stream, chunk=response)
+            message = self.get_model_result(data)
+            if not message:
+                continue
             messages.append({
                 "role": "assistant", 
                 "content": message["conclusion"],
                 "tool_calls": message["raw_tool_calls"]
             })
-            if self._is_finish(message, is_subagent=False):
+            if self.is_finish(message, is_subagent=False):
                 break
 
             tool_results = []
@@ -170,4 +118,4 @@ class AutoAgent:
                 tool_results.insert(0, {"role": "user", "content": "<reminder>Update your todos.</reminder>"})
             if manual_compact:
                 print("[manual compact]")
-                messages[:] = self.context_compressauto_compact(messages)
+                messages[:] = self.context_compress.auto_compact(messages)

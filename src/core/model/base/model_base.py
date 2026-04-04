@@ -14,3 +14,6 @@ class ModelBase:
     
     def is_finish(self, chunk: Any = None) -> Any:
         raise NotImplementedError("Method not implemented.")
+    
+    def get_tool_calls(self, tool_calls: List[Any]) -> Any:
+        raise NotImplementedError("Method not implemented.")

@@ -170,6 +170,14 @@ class JsonParser():
         with open(file_path, 'r', encoding=encoding) as f:
             json_str = f.read()
             return json.loads(json_str)
+        
+    def is_json_serializable(self, value):
+        try:
+            import json
+            json.dumps(value)
+            return True
+        except (TypeError, ValueError):
+            return False
     
     def _internal_to_elem(self, pfsh, factory=ET.Element):
         """Convert an internal dictionary (not JSON!) into an Element.

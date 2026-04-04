@@ -1,8 +1,8 @@
 import re
 from pathlib import Path
 class SkillLoader:
-    def __init__(self, skills_dir: Path):
-        self.skills_dir = skills_dir
+    def __init__(self, work_dir: Path):
+        self.skills_dir = work_dir / "skills"
         self.skills = {}
         self._load_all()
 

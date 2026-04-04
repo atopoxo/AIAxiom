@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from core.model.mgr.model_mgr import ModelMgr
 from core.auto_agent.auto_agent import AutoAgent
-from tools.tools import SKILL_LOADER
+from tools.tools import TEAM
 from core.context_compress.context_compress import ContextCompression
 
 custom_model_config = {
@@ -33,7 +33,7 @@ custom_model_config = {
 
 WORKDIR = Path.cwd()
 
-SYSTEM  = f"You are a coding agent at {WORKDIR}. Use task tools to plan and track work."
+SYSTEM = f"You are a team lead at {WORKDIR}. Spawn teammates and communicate via inboxes."
 SYSTEM  += "you must finish all the tasks if and only if all the tasks are done, then return <<<-done->>>"
 
 SUBAGENT_SYSTEM = f"You are a coding subagent at {WORKDIR}. Complete the given task, then summarize your findings."
@@ -50,11 +50,15 @@ if __name__ == "__main__":
     context_compress.set_model(model)
     context_compress.set_model_name(model_name)
     context_compress.set_stream(stream)
+    context_compress.set_threshold(50000)
     agent = AutoAgent()
     agent.set_model(model)
     agent.set_model_name(model_name)
     agent.set_subagent_prompt(SUBAGENT_SYSTEM)
     agent.set_context_compress(context_compress)
+    TEAM.set_model(model)
+    TEAM.set_model_name(model_name)
+    
     while True:
         try:
             query = input("\033[36ms01 >> \033[0m")
