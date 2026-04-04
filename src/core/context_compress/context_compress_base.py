@@ -1,7 +1,7 @@
 from typing import Any
 from pathlib import Path
-from core.json.json_parser import get_json_parser
-from core.model.base.model_base import ModelBase
+from src.core.json.json_parser import get_json_parser
+from src.core.model.base.model_base import ModelBase
 
 class ContextCompressBase:
     def __init__(self, work_dir: Path, keep_recent: int):
