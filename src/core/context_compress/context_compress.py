@@ -1,7 +1,7 @@
 import time
 from pathlib import Path
-from src.core.model.base.model_base import ModelBase
-from src.core.context_compress.context_compress_base import ContextCompressBase
+from core.model.base.model_base import ModelBase
+from core.context_compress.context_compress_base import ContextCompressBase
 
 class ContextCompression(ContextCompressBase):
     def __init__(self, work_dir: Path, keep_recent: int):
