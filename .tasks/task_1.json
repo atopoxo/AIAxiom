@@ -1,9 +1,0 @@
-{
-  "id": 1,
-  "subject": "Read all Python files in the project",
-  "description": "Systematically locate and read every Python file in the project one by one",
-  "status": "in_progress",
-  "blocked_by": [],
-  "blocks": [],
-  "owner": ""
-}
