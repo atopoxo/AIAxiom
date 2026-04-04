@@ -1,0 +1,9 @@
+{
+  "id": 2,
+  "subject": "修复README.md文件的编码和乱码问题",
+  "description": "将README.md文件转换为UTF-8编码，修复乱码字符",
+  "status": "completed",
+  "blocked_by": [],
+  "blocks": [],
+  "owner": ""
+}

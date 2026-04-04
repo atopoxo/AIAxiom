@@ -1,0 +1,45 @@
+{
+    "default_tool_model": "online/volcengine-deepseek-chat",
+    "models": [
+        {
+            "url": "https://tech.seasungame.com/ai_in_one/v2/",
+            "id": "online/volcengine-deepseek-chat",
+            "platform": "online",
+            "code_name": "deepseek",
+            "model_name": "deepseek-v3.2",
+            "name": "api-deepseek-chat",
+            "type": "外网-快速响应",
+            "temperature": 1,
+            "max_tokens": 8192,
+            "show_config": false,
+            "safe": false,
+            "example_key": "n8H6NLxPxkgVRffvC05935E4EeC34985B4A35f53D8A5E669",
+            "can_modify": false,
+            "extra": {
+                "thinking": {
+                    "type": "disabled"
+                }
+            }
+        },
+        {
+            "url": "https://tech.seasungame.com/ai_in_one/v2/",
+            "id": "online/volcengine-deepseek-reasoner",
+            "platform": "online",
+            "code_name": "deepseek",
+            "model_name": "tcdpr1",
+            "name": "api-deepseek-reasoner",
+            "type": "外网-深度思考",
+            "temperature": 1,
+            "max_tokens": 8192,
+            "show_config": false,
+            "safe": false,
+            "example_key": "n8H6NLxPxkgVRffvC05935E4EeC34985B4A35f53D8A5E669",
+            "can_modify": false,
+            "extra": {
+                "thinking": {
+                    "type": "enabled"
+                }
+            }
+        }
+    ]
+}
