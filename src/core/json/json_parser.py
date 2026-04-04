@@ -3,9 +3,9 @@ import json
 from jsoncomment import JsonComment
 import datetime
 from typing import Any, Dict, Union
-from core.function.base_function import *
-from core.log_mgr.log_mgr import log_mgr
-from core.json.json_utils import *
+from src.core.function.base_function import *
+from src.core.log_mgr.log_mgr import log_mgr
+from src.core.json.json_utils import *
 from collections import OrderedDict
 import xml.etree.cElementTree as ET
 

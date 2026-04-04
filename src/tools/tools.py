@@ -1,8 +1,8 @@
 import subprocess
 from pathlib import Path
-from tools.todo_mgr import TodoManager
-from tools.skill_loader.skill_loader import SkillLoader
-from tools.task_mgr.task_mgr import TaskMgr
+from src.tools.todo_mgr import TodoManager
+from src.tools.skill_loader.skill_loader import SkillLoader
+from src.tools.task_mgr.task_mgr import TaskMgr
 
 TODO = TodoManager()
 
@@ -23,13 +23,26 @@ def run_bash(command: str) -> str:
         return "Error: Dangerous command blocked"
     try:
         r = subprocess.run(command, shell=True, cwd=WORKDIR,
-                           capture_output=True, text=True, encoding='utf-8', timeout=120)
-        out = (r.stdout or "") + (r.stderr or "").strip()
+                           capture_output=True, timeout=120)
+        # 解码输出，优先使用UTF-8，失败时使用系统编码
+        try:
+            stdout = r.stdout.decode('utf-8') if r.stdout else ""
+        except UnicodeDecodeError:
+            import locale
+            stdout = r.stdout.decode(locale.getpreferredencoding(), errors='replace') if r.stdout else ""
+        
+        try:
+            stderr = r.stderr.decode('utf-8') if r.stderr else ""
+        except UnicodeDecodeError:
+            import locale
+            stderr = r.stderr.decode(locale.getpreferredencoding(), errors='replace') if r.stderr else ""
+        
+        out = stdout + stderr.strip()
         return out[:50000] if out else "(no output)"
     except subprocess.TimeoutExpired:
         return "Error: Timeout (120s)"
     
-def run_read(path: str, limit: int = None) -> str:
+def run_read(path: str, limit: int | None = None) -> str:
     try:
         text = safe_path(path).read_text()
         lines = text.splitlines()

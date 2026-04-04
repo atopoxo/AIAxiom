@@ -1,5 +1,5 @@
 from pathlib import Path
-from core.json.json_parser import get_json_parser
+from src.core.json.json_parser import get_json_parser
 
 class TaskMgr:
     def __init__(self, tasks_dir: Path):
@@ -16,7 +16,12 @@ class TaskMgr:
         path = self.dir / f"task_{task_id}.json"
         if not path.exists():
             raise ValueError(f"Task {task_id} not found")
-        return self.json_parser.parse(path.read_text())
+        result = self.json_parser.parse(path.read_text())
+        if isinstance(result, str):
+            # 如果是字符串，尝试解析为JSON
+            import json
+            return json.loads(result)
+        return result
     
     def _save(self, task: dict):
         path = self.dir / f"task_{task['id']}.json"
@@ -34,8 +39,8 @@ class TaskMgr:
     def get(self, task_id: int) -> str:
         return self.json_parser.to_json_str(self._load(task_id), indent=2)
     
-    def update(self, task_id: int, status: str = None,
-               add_blocked_by: list = None, add_blocks: list = None) -> str:
+    def update(self, task_id: int, status: str | None = None,
+               add_blocked_by: list | None = None, add_blocks: list | None = None) -> str:
         task = self._load(task_id)
         if status:
             if status not in ("pending", "in_progress", "completed"):
@@ -61,6 +66,9 @@ class TaskMgr:
     def _clear_dependency(self, completed_id: int):
         for f in self.dir.glob("task_*.json"):
             task = self.json_parser.parse(f.read_text())
+            if isinstance(task, str):
+                import json
+                task = json.loads(task)
             if completed_id in task.get("blocked_by", []):
                 task["blocked_by"].remove(completed_id)
                 self._save(task)
@@ -68,7 +76,11 @@ class TaskMgr:
     def list_all(self) -> str:
         tasks = []
         for f in sorted(self.dir.glob("task_*.json")):
-            tasks.append(self.json_parser.parse(f.read_text()))
+            task = self.json_parser.parse(f.read_text())
+            if isinstance(task, str):
+                import json
+                task = json.loads(task)
+            tasks.append(task)
         if not tasks:
             return "No tasks."
         lines = []
