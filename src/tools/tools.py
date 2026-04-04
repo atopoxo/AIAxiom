@@ -5,7 +5,7 @@ from tools.skill_loader.skill_loader import SkillLoader
 from tools.task_mgr.task_mgr import TaskMgr
 from tools.background_mgr.background_mgr import BackgroundMgr
 from tools.system_tools.system_tools import SystemTools
-from tools.message_bus.msg_bus import MsgBus
+from tools.msg_bus.msg_bus import MsgBus
 from tools.team_mgr.team_mgr import TeamMgr
 
 
@@ -20,29 +20,32 @@ BG.set_work_dir(WORKDIR)
 TODO = TodoManager()
 BUS = MsgBus(WORKDIR)
 TEAM = TeamMgr(WORKDIR)
-TEAM.set_message_bus(BUS)
+TEAM.set_msg_bus(BUS)
 TEAM.set_system_tools(SYSTEM_TOOLS)
 
 
 TOOL_HANDLERS = {
-    "task_create":      lambda **kw: TASKS.create(kw["subject"], kw.get("description", "")),
-    "task_update":      lambda **kw: TASKS.update(kw["task_id"], kw.get("status"), kw.get("add_blocked_by"), kw.get("add_blocks")),
-    "task_list":        lambda **kw: TASKS.list_all(),
-    "task_get":         lambda **kw: TASKS.get(kw["task_id"]),
-    "bash":             lambda **kw: SYSTEM_TOOLS.run_bash(kw["command"]),
-    "read_file":        lambda **kw: SYSTEM_TOOLS.run_read(kw["path"], kw.get("limit")),
-    "write_file":       lambda **kw: SYSTEM_TOOLS.run_write(kw["path"], kw["content"]),
-    "edit_file":        lambda **kw: SYSTEM_TOOLS.run_edit(kw["path"], kw["old_text"], kw["new_text"]),
-    "todo":             lambda **kw: TODO.update(kw["items"]),
-    "load_skill":       lambda **kw: SKILL_LOADER.get_content(kw["name"]),
-    "compact":          lambda **kw: "Manual compression requested.",
-    "background_run":   lambda **kw: BG.run(kw["command"]),
-    "check_background": lambda **kw: BG.check(kw.get("task_id")),
-    "spawn_teammate":  lambda **kw: TEAM.spawn(kw["name"], kw["role"], kw["prompt"]),
-    "list_teammates":  lambda **kw: TEAM.list_all(),
-    "send_message":    lambda **kw: BUS.send("lead", kw["to"], kw["content"], kw.get("msg_type", "message")),
-    "read_inbox":      lambda **kw: json.dumps(BUS.read_inbox("lead"), indent=2),
-    "broadcast":       lambda **kw: BUS.broadcast("lead", kw["content"], TEAM.member_names())
+    "task_create":          lambda **kw: TASKS.create(kw["subject"], kw.get("description", "")),
+    "task_update":          lambda **kw: TASKS.update(kw["task_id"], kw.get("status"), kw.get("add_blocked_by"), kw.get("add_blocks")),
+    "task_list":            lambda **kw: TASKS.list_all(),
+    "task_get":             lambda **kw: TASKS.get(kw["task_id"]),
+    "bash":                 lambda **kw: SYSTEM_TOOLS.run_bash(kw["command"]),
+    "read_file":            lambda **kw: SYSTEM_TOOLS.run_read(kw["path"], kw.get("limit")),
+    "write_file":           lambda **kw: SYSTEM_TOOLS.run_write(kw["path"], kw["content"]),
+    "edit_file":            lambda **kw: SYSTEM_TOOLS.run_edit(kw["path"], kw["old_text"], kw["new_text"]),
+    "todo":                 lambda **kw: TODO.update(kw["items"]),
+    "load_skill":           lambda **kw: SKILL_LOADER.get_content(kw["name"]),
+    "compact":              lambda **kw: "Manual compression requested.",
+    "background_run":       lambda **kw: BG.run(kw["command"]),
+    "check_background":     lambda **kw: BG.check(kw.get("task_id")),
+    "spawn_teammate":       lambda **kw: TEAM.spawn(kw["name"], kw["role"], kw["prompt"]),
+    "list_teammates":       lambda **kw: TEAM.list_all(),
+    "send_message":         lambda **kw: BUS.send("lead", kw["to"], kw["content"], kw.get("msg_type", "message")),
+    "read_inbox":           lambda **kw: json.dumps(BUS.read_inbox("lead"), indent=2),
+    "broadcast":            lambda **kw: BUS.broadcast("lead", kw["content"], TEAM.member_names()),
+    "shutdown_request":     lambda **kw: TEAM.handle_shutdown_request(kw["teammate"]),
+    "shutdown_response":    lambda **kw: TEAM.check_shutdown_status(kw.get("request_id", "")),
+    "plan_approval":        lambda **kw: TEAM.handle_plan_review(kw["request_id"], kw["approve"], kw.get("feedback", "")),
 }
 
 CHILD_TOOLS = [
@@ -321,6 +324,50 @@ CHILD_TOOLS = [
                     "content": {"type": "string"}
                 }, 
                 "required": ["content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shutdown_request", 
+            "description": "Request a teammate to shut down gracefully. Returns a request_id for tracking.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "teammate": {"type": "string"}
+                }, 
+                "required": ["teammate"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shutdown_response", 
+            "description": "Check the status of a shutdown request by request_id.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "request_id": {"type": "string"}
+                }, 
+                "required": ["request_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "plan_approval", 
+            "description": "Approve or reject a teammate's plan. Provide request_id + approve + optional feedback.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "request_id": {"type": "string"}, 
+                    "approve": {"type": "boolean"}, 
+                    "feedback": {"type": "string"}
+                }, 
+                "required": ["request_id", "approve"]
             }
         }
     }

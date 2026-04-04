@@ -30,8 +30,7 @@ class MsgBus:
                 "content": "Noted inbox messages.",
             })
 
-    def send(self, sender: str, to: str, content: str,
-             msg_type: str = "message", extra: dict = None) -> str:
+    def send(self, sender: str, to: str, content: str, msg_type: str = "message", extra: dict = None) -> str:
         if msg_type not in self.valid_msg_types:
             return f"Error: Invalid type '{msg_type}'. Valid: {self.valid_msg_types}"
         msg = {
