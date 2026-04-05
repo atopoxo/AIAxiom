@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import subprocess
 from tools.todo_mgr.todo_mgr import TodoManager
 from tools.skill_loader.skill_loader import SkillLoader
 from tools.task_mgr.task_mgr import TaskMgr
@@ -7,7 +8,26 @@ from tools.background_mgr.background_mgr import BackgroundMgr
 from tools.system_tools.system_tools import SystemTools
 from tools.msg_bus.msg_bus import MsgBus
 from tools.team_mgr.team_mgr import TeamMgr
+from tools.event_bus.event_bus import EventBus
+from tools.worktree_mgr.worktree_mgr import WorktreeMgr
 
+def detect_repo_root(cwd: Path) -> Path | None:
+    """Return git repo root if cwd is inside a repo, else None."""
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if r.returncode != 0:
+            return None
+        root = Path(r.stdout.strip())
+        return root if root.exists() else None
+    except Exception:
+        return None
+    
 
 WORKDIR = Path.cwd()
 
@@ -23,12 +43,24 @@ TEAM = TeamMgr(WORKDIR)
 TEAM.set_msg_bus(BUS)
 TEAM.set_system_tools(SYSTEM_TOOLS)
 TEAM.set_task_mgr(TASKS)
+REPO_ROOT = detect_repo_root(WORKDIR) or WORKDIR
+EVENTS = EventBus(REPO_ROOT / ".worktrees" / "events.jsonl")
+WORKTREES = WorktreeMgr(REPO_ROOT, TASKS, EVENTS)
 
 TOOL_HANDLERS = {
     "task_create":          lambda **kw: TASKS.create(kw["subject"], kw.get("description", "")),
     "task_update":          lambda **kw: TASKS.update(kw["task_id"], kw.get("status"), kw.get("add_blocked_by"), kw.get("add_blocks")),
     "task_list":            lambda **kw: TASKS.list_all(),
     "task_get":             lambda **kw: TASKS.get(kw["task_id"]),
+    "task_bind_worktree":   lambda **kw: TASKS.bind_worktree(kw["task_id"], kw["worktree"], kw.get("owner", "")),
+    "claim_task":           lambda **kw: TASKS.claim_task(kw["task_id"], "lead"),
+    "worktree_create":      lambda **kw: WORKTREES.create(kw["name"], kw.get("task_id"), kw.get("base_ref", "HEAD")),
+    "worktree_list":        lambda **kw: WORKTREES.list_all(),
+    "worktree_status":      lambda **kw: WORKTREES.status(kw["name"]),
+    "worktree_run":         lambda **kw: WORKTREES.run(kw["name"], kw["command"]),
+    "worktree_keep":        lambda **kw: WORKTREES.keep(kw["name"]),
+    "worktree_remove":      lambda **kw: WORKTREES.remove(kw["name"], kw.get("force", False), kw.get("complete_task", False)),
+    "worktree_events":      lambda **kw: EVENTS.list_recent(kw.get("limit", 20)),
     "bash":                 lambda **kw: SYSTEM_TOOLS.run_bash(kw["command"]),
     "read_file":            lambda **kw: SYSTEM_TOOLS.run_read(kw["path"], kw.get("limit")),
     "write_file":           lambda **kw: SYSTEM_TOOLS.run_write(kw["path"], kw["content"]),
@@ -47,7 +79,6 @@ TOOL_HANDLERS = {
     "shutdown_response":    lambda **kw: TEAM.check_shutdown_status(kw.get("request_id", "")),
     "plan_approval":        lambda **kw: TEAM.handle_plan_review(kw["request_id"], kw["approve"], kw.get("feedback", "")),
     "idle":                 lambda **kw: "Lead does not idle.",
-    "claim_task":           lambda **kw: TASKS.claim_task(kw["task_id"], "lead"),
 }
 
 CHILD_TOOLS = [
@@ -114,6 +145,135 @@ CHILD_TOOLS = [
                     "task_id": {"type": "integer"}
                 }, 
                 "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_bind_worktree",
+            "description": "Bind a task to a worktree name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer"},
+                    "worktree": {"type": "string"},
+                    "owner": {"type": "string"},
+                },
+                "required": ["task_id", "worktree"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "claim_task", 
+            "description": "Claim a task from the board by ID.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "task_id": {"type": "integer"}
+                }, 
+                "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "worktree_create",
+            "description": "Create a git worktree and optionally bind it to a task.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "task_id": {"type": "integer"},
+                    "base_ref": {"type": "string"}
+                },
+                "required": ["name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "worktree_list",
+            "description": "List worktrees tracked in .worktrees/index.json.",
+            "parameters": {
+                "type": "object", 
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "worktree_status",
+            "description": "Show git status for one worktree.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"}
+                },
+                "required": ["name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "worktree_run",
+            "description": "Run a shell command in a named worktree directory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "command": {"type": "string"}
+                },
+                "required": ["name", "command"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "worktree_remove",
+            "description": "Remove a worktree and optionally mark its bound task completed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "force": {"type": "boolean"},
+                    "complete_task": {"type": "boolean"}
+                },
+                "required": ["name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "worktree_keep",
+            "description": "Mark a worktree as kept in lifecycle state without removing it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"}
+                },
+                "required": ["name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "worktree_events",
+            "description": "List recent worktree/task lifecycle events from .worktrees/events.jsonl.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer"}
+                }
             }
         }
     },
@@ -381,20 +541,6 @@ CHILD_TOOLS = [
             "parameters": {
                 "type": "object", 
                 "properties": {}
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "claim_task", 
-            "description": "Claim a task from the board by ID.",
-            "parameters": {
-                "type": "object", 
-                "properties": {
-                    "task_id": {"type": "integer"}
-                }, 
-                "required": ["task_id"]
             }
         }
     }

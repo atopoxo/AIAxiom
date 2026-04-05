@@ -1,74 +1,64 @@
 from pathlib import Path
-import threading
+import time
 from core.json.json_parser import get_json_parser
+from tools.task_mgr.task_mgr_base import TaskMgrBase
 
-class TaskMgr:
+class TaskMgr(TaskMgrBase):
     def __init__(self, work_dir: Path):
-        self.dir = work_dir / ".tasks"
-        self.dir.mkdir(exist_ok=True)
-        self._next_id = self._max_id() + 1
-        self.json_parser = get_json_parser()
-        self.claim_lock = threading.Lock()
-
-    def _max_id(self) -> int:
-        ids = [int(f.stem.split("_")[1]) for f in self.dir.glob("task_*.json")]
-        return max(ids) if ids else 0
-    
-    def _load(self, task_id: int) -> dict:
-        path = self.dir / f"task_{task_id}.json"
-        if not path.exists():
-            raise ValueError(f"Task {task_id} not found")
-        result = self.json_parser.read_json_file(path)
-        return result
-    
-    def _save(self, task: dict):
-        path = self.dir / f"task_{task['id']}.json"
-        json_str = self.json_parser.to_json_str(task, indent=2)
-        path.write_text(json_str, encoding='utf-8')
+        super().__init__(work_dir)
 
     def create(self, subject: str, description: str = "") -> str:
         task = {
-            "id": self._next_id, "subject": subject, "description": description,
-            "status": "pending", "blocked_by": [], "blocks": [], "owner": "",
+            "id": self._next_id, 
+            "subject": subject, 
+            "description": description,
+            "status": "pending",
+            "owner": "",
+            "worktree": "",
+            "blockedBy": [],
+            "created_at": time.time(),
+            "updated_at": time.time(),
         }
         self._save(task)
         self._next_id += 1
-        return self.json_parser.to_json_str(task, indent=2)
+        return self.json_parser.to_json_str(task, indent=4)
     
     def get(self, task_id: int) -> str:
-        return self.json_parser.to_json_str(self._load(task_id), indent=2)
+        return self.json_parser.to_json_str(self._load(task_id), indent=4)
     
-    def update(self, task_id: int, status: str | None = None,
-               add_blocked_by: list | None = None, add_blocks: list | None = None) -> str:
+    def exists(self, task_id: int) -> bool:
+        return self._path(task_id).exists()
+    
+    def update(self, task_id: int, status: str = None, owner: str = None) -> str:
         task = self._load(task_id)
         if status:
             if status not in ("pending", "in_progress", "completed"):
                 raise ValueError(f"Invalid status: {status}")
             task["status"] = status
-            if status == "completed":
-                self._clear_dependency(task_id)
-        if add_blocked_by:
-            task["blocked_by"] = list(set(task["blocked_by"] + add_blocked_by))
-        if add_blocks:
-            task["blocks"] = list(set(task["blocks"] + add_blocks))
-            for blocked_id in add_blocks:
-                try:
-                    blocked = self._load(blocked_id)
-                    if task_id not in blocked["blocked_by"]:
-                        blocked["blocked_by"].append(task_id)
-                        self._save(blocked)
-                except ValueError:
-                    pass
+        if owner is not None:
+            task["owner"] = owner
+        task["updated_at"] = time.time()
         self._save(task)
-        return self.json_parser.to_json_str(task, indent=2)
+        return self.json_parser.to_json_str(task, indent=4)
     
-    def _clear_dependency(self, completed_id: int):
-        for f in self.dir.glob("task_*.json"):
-            task = self.json_parser.read_json_file(f)
-            if completed_id in task.get("blocked_by", []):
-                task["blocked_by"].remove(completed_id)
-                self._save(task)
-
+    def bind_worktree(self, task_id: int, worktree: str, owner: str = "") -> str:
+        task = self._load(task_id)
+        task["worktree"] = worktree
+        if owner:
+            task["owner"] = owner
+        if task["status"] == "pending":
+            task["status"] = "in_progress"
+        task["updated_at"] = time.time()
+        self._save(task)
+        return self.json_parser.to_json_str(task, indent=4)
+    
+    def unbind_worktree(self, task_id: int) -> str:
+        task = self._load(task_id)
+        task["worktree"] = ""
+        task["updated_at"] = time.time()
+        self._save(task)
+        return self.json_parser.to_json_str(task, indent=4)
+    
     def list_all(self) -> str:
         tasks = []
         for f in sorted(self.dir.glob("task_*.json")):
@@ -78,12 +68,17 @@ class TaskMgr:
             return "No tasks."
         status_prompt = "\nall tasks has three status:\n"
         status_prompt += "\n".join(["pending: [ ]", "in_progress: [>]", "completed: [x]"])
-        status_prompt += "\nnow tasks status:\n\n"
+        status_prompt += "\nnow tasks status:\n"
         lines = []
         for t in tasks:
-            marker = {"pending": "[ ]", "in_progress": "[>]", "completed": "[x]"}.get(t.get("status", ""), "[?]")
-            blocked = f" (blocked by: {t['blocked_by']})" if t.get("blocked_by") else ""
-            lines.append(f"{marker} #{t['id']}: {t['subject']}{blocked}")
+            marker = {
+                "pending": "[ ]", 
+                "in_progress": "[>]",
+                "completed": "[x]"
+            }.get(t.get("status", ""), "[?]")
+            owner = f" owner={t['owner']}" if t.get("owner") else ""
+            wt = f" wt={t['worktree']}" if t.get("worktree") else ""
+            lines.append(f"{marker} #{t['id']}: {t['subject']}{owner}{wt}")
         status_prompt += "\n".join(lines)
         return status_prompt
     
