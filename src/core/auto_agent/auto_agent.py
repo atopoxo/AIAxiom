@@ -103,18 +103,19 @@ class AutoAgent(AutoAgentBase):
                     else:
                         handler = TOOL_HANDLERS.get(tool_call["name"])
                         output = handler(**arguments) if handler else f"Unknown tool: {tool_call['name']}"
+                    tool_results.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call["id"],
+                        "content": output
+                    })
                 except Exception as ex:
                     output = f"[agent] excute tool[{tool_call['name']}] error: {str(ex)}"
                 print(output)
-                tool_results.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call["id"],
-                    "content": output
-                })
                 if tool_call["name"] == "todo":
                     used_todo = True
             # messages.append({"role": "user", "content": self.json_parser.to_json_str(tool_results)})
-            messages.extend(tool_results)
+            if len(tool_results) > 0:
+                messages.extend(tool_results) 
             rounds_since_todo = 0 if used_todo else rounds_since_todo + 1
             if rounds_since_todo >= 3:
                 tool_results.insert(0, {"role": "user", "content": "<reminder>Update your todos.</reminder>"})

@@ -47,7 +47,8 @@ class TeamMgrBase(ModelOperator):
         team_name = self.config["team_name"]
         sys_prompt = (
             f"You are '{name}', role: {role}, at {self.work_dir}. "
-            f"Use idle tool when you have no more work. You will auto-claim new tasks."
+            f"Use idle tool when you have no more work. You will auto-claim new tasks. You need to pass in_progress task."
+            f"You can only claim a task every times."
             f"you must finish all the tasks if and only if all the tasks are done, then return <<<-done->>>"
         )
         tools = self._teammate_tools()
@@ -63,7 +64,7 @@ class TeamMgrBase(ModelOperator):
             message = self.get_model_result(data)
             if not message:
                 self._set_status(name, "idle")
-                return
+                break
             messages.append({
                 "role": "assistant", 
                 "content": message["conclusion"],
@@ -81,15 +82,16 @@ class TeamMgrBase(ModelOperator):
                         output = "Entering idle phase. Will poll for new tasks."
                     else:
                         output = self._exec(name, tool_call["name"], arguments)
+                    tool_results.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call["id"],
+                        "content": str(output)
+                    })
                 except Exception as ex:
                     output = f"[{name}] excute tool[{tool_call['name']}] error: {str(ex)}"
                 print(f"  [{name}] {tool_call['name']}: {str(output)}")
-                tool_results.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call["id"],
-                    "content": str(output)
-                })
-            messages.extend(tool_results)
+            if len(tool_results) > 0:
+                messages.extend(tool_results)
             if idle_requested:
                 break
         self._set_status(name, "idle")
@@ -163,6 +165,8 @@ class TeamMgrBase(ModelOperator):
             return f"Plan submitted (request_id={req_id}). Waiting for lead approval."
         if tool_name == "claim_task":
             return self.task_mgr.claim_task(args["task_id"], sender)
+        if tool_name == "task_list":
+            return self.task_mgr.list_all()
         return f"Unknown tool: {tool_name}"
     
     def _teammate_tools(self) -> list:
@@ -306,6 +310,17 @@ class TeamMgrBase(ModelOperator):
                             "task_id": {"type": "integer"}
                         }, 
                         "required": ["task_id"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "task_list", 
+                    "description": "List all tasks with status summary.",
+                    "parameters": {
+                        "type": "object", 
+                        "properties": {}
                     }
                 }
             }

@@ -76,12 +76,16 @@ class TaskMgr:
             tasks.append(task)
         if not tasks:
             return "No tasks."
+        status_prompt = "\nall tasks has three status:\n"
+        status_prompt += "\n".join(["pending: [ ]", "in_progress: [>]", "completed: [x]"])
+        status_prompt += "\nnow tasks status:\n\n"
         lines = []
         for t in tasks:
             marker = {"pending": "[ ]", "in_progress": "[>]", "completed": "[x]"}.get(t.get("status", ""), "[?]")
             blocked = f" (blocked by: {t['blocked_by']})" if t.get("blocked_by") else ""
             lines.append(f"{marker} #{t['id']}: {t['subject']}{blocked}")
-        return "\n".join(lines)
+        status_prompt += "\n".join(lines)
+        return status_prompt
     
     def scan_unclaimed_tasks(self) -> list:
         unclaimed = []
