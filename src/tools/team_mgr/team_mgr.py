@@ -4,6 +4,7 @@ from pathlib import Path
 from tools.team_mgr.team_mgr_base import TeamMgrBase
 from tools.msg_bus.msg_bus import MsgBus
 from tools.system_tools.system_tools import SystemTools
+from tools.task_mgr.task_mgr import TaskMgr
 
 class TeamMgr(TeamMgrBase):
     def __init__(self, work_dir: Path):
@@ -14,6 +15,9 @@ class TeamMgr(TeamMgrBase):
 
     def set_system_tools(self, tools: SystemTools):
         self.system_tools = tools
+
+    def set_task_mgr(self, mgr: TaskMgr):
+        self.task_mgr = mgr
     
     def spawn(self, name: str, role: str, prompt: str) -> str:
         member = self._find_member(name)
@@ -72,3 +76,9 @@ class TeamMgr(TeamMgrBase):
     def check_shutdown_status(self, request_id: str) -> str:
         with self.tracker_lock:
             return self.json_parser.to_json_str(self.shutdown_requests.get(request_id, {"error": "not found"}))
+    
+    def make_identity_block(self, name: str, role: str, team_name: str) -> dict:
+        return {
+            "role": "user",
+            "content": f"<identity>You are '{name}', role: {role}, team: {team_name}. Continue your work.</identity>",
+        }

@@ -93,17 +93,19 @@ class AutoAgent(AutoAgentBase):
             used_todo = False
             manual_compact = False
             for tool_call in message["tool_calls"]:
-                arguments = self.json_parser.parse(tool_call["arguments"])
-                if tool_call["name"] == "compact":
-                    manual_compact = True
-                    output = "Compressing..."
-                elif tool_call["name"] == "task":
-                    output = self.run_subagent(model, CHILD_TOOLS, arguments["prompt"])
-                else:
-                    handler = TOOL_HANDLERS.get(tool_call["name"])
-                    output = handler(**arguments) if handler else f"Unknown tool: {tool_call['name']}"
+                try:
+                    arguments = self.json_parser.parse(tool_call["arguments"])
+                    if tool_call["name"] == "compact":
+                        manual_compact = True
+                        output = "Compressing..."
+                    elif tool_call["name"] == "task":
+                        output = self.run_subagent(model, CHILD_TOOLS, arguments["prompt"])
+                    else:
+                        handler = TOOL_HANDLERS.get(tool_call["name"])
+                        output = handler(**arguments) if handler else f"Unknown tool: {tool_call['name']}"
+                except Exception as ex:
+                    output = f"[agent] excute tool[{tool_call['name']}] error: {str(ex)}"
                 print(output)
-                
                 tool_results.append({
                     "role": "tool",
                     "tool_call_id": tool_call["id"],

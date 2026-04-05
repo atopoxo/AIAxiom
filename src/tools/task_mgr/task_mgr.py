@@ -1,4 +1,5 @@
 from pathlib import Path
+import threading
 from core.json.json_parser import get_json_parser
 
 class TaskMgr:
@@ -7,6 +8,7 @@ class TaskMgr:
         self.dir.mkdir(exist_ok=True)
         self._next_id = self._max_id() + 1
         self.json_parser = get_json_parser()
+        self.claim_lock = threading.Lock()
 
     def _max_id(self) -> int:
         ids = [int(f.stem.split("_")[1]) for f in self.dir.glob("task_*.json")]
@@ -80,3 +82,24 @@ class TaskMgr:
             blocked = f" (blocked by: {t['blocked_by']})" if t.get("blocked_by") else ""
             lines.append(f"{marker} #{t['id']}: {t['subject']}{blocked}")
         return "\n".join(lines)
+    
+    def scan_unclaimed_tasks(self) -> list:
+        unclaimed = []
+        for f in sorted(self.dir.glob("task_*.json")):
+            task = self.json_parser.parse(f.read_text())
+            if (task.get("status") == "pending"
+                    and not task.get("owner")
+                    and not task.get("blockedBy")):
+                unclaimed.append(task)
+        return unclaimed
+    
+    def claim_task(self, task_id: int, owner: str) -> str:
+        with self.claim_lock:
+            path = self.dir / f"task_{task_id}.json"
+            if not path.exists():
+                return f"Error: Task {task_id} not found"
+            task = self.json_parser.parse(path.read_text())
+            task["owner"] = owner
+            task["status"] = "in_progress"
+            path.write_text(self.json_parser.to_json_str(task, indent=4))
+        return f"Claimed task #{task_id} for {owner}"

@@ -22,7 +22,7 @@ BUS = MsgBus(WORKDIR)
 TEAM = TeamMgr(WORKDIR)
 TEAM.set_msg_bus(BUS)
 TEAM.set_system_tools(SYSTEM_TOOLS)
-
+TEAM.set_task_mgr(TASKS)
 
 TOOL_HANDLERS = {
     "task_create":          lambda **kw: TASKS.create(kw["subject"], kw.get("description", "")),
@@ -46,6 +46,8 @@ TOOL_HANDLERS = {
     "shutdown_request":     lambda **kw: TEAM.handle_shutdown_request(kw["teammate"]),
     "shutdown_response":    lambda **kw: TEAM.check_shutdown_status(kw.get("request_id", "")),
     "plan_approval":        lambda **kw: TEAM.handle_plan_review(kw["request_id"], kw["approve"], kw.get("feedback", "")),
+    "idle":                 lambda **kw: "Lead does not idle.",
+    "claim_task":           lambda **kw: TASKS.claim_task(kw["task_id"], "lead"),
 }
 
 CHILD_TOOLS = [
@@ -368,6 +370,31 @@ CHILD_TOOLS = [
                     "feedback": {"type": "string"}
                 }, 
                 "required": ["request_id", "approve"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "idle", 
+            "description": "Enter idle state (for lead -- rarely used).",
+            "parameters": {
+                "type": "object", 
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "claim_task", 
+            "description": "Claim a task from the board by ID.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "task_id": {"type": "integer"}
+                }, 
+                "required": ["task_id"]
             }
         }
     }

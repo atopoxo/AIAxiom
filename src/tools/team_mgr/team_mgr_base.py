@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 import uuid
 import threading
@@ -18,6 +19,9 @@ class TeamMgrBase(ModelOperator):
         self.tracker_lock = threading.Lock()
         self.shutdown_requests = {}
         self.plan_requests = {}
+        self.idle_timeout = 60
+        self.poll_interval = 5
+        self.task_mgr = None
 
     def _load_config(self) -> dict:
         if self.config_path.exists():
@@ -33,26 +37,33 @@ class TeamMgrBase(ModelOperator):
                 return m
         return None
     
+    def _set_status(self, name: str, status: str):
+        member = self._find_member(name)
+        if member:
+            member["status"] = status
+            self._save_config()
+    
     def _teammate_loop(self, name: str, role: str, prompt: str):
+        team_name = self.config["team_name"]
         sys_prompt = (
             f"You are '{name}', role: {role}, at {self.work_dir}. "
-            f"Submit plans via plan_approval before major work. "
-            f"Respond to shutdown_request with shutdown_response."
+            f"Use idle tool when you have no more work. You will auto-claim new tasks."
             f"you must finish all the tasks if and only if all the tasks are done, then return <<<-done->>>"
         )
         tools = self._teammate_tools()
         data = self.get_model_contex(tools=tools, query=prompt, prompt=sys_prompt)
         messages = data["messages"]
-        should_exit = False
         for _ in range(50):
             inbox = self.msg_bus.read_inbox(name)
             for msg in inbox:
+                if msg.get("type") == "shutdown_request":
+                    self._set_status(name, "shutdown")
+                    return
                 messages.append({"role": "user", "content": self.json_parser.to_json_str(msg)})
-            if should_exit:
-                break
             message = self.get_model_result(data)
             if not message:
-                continue
+                self._set_status(name, "idle")
+                return
             messages.append({
                 "role": "assistant", 
                 "content": message["conclusion"],
@@ -61,22 +72,59 @@ class TeamMgrBase(ModelOperator):
             if self.is_finish(message, is_subagent=False):
                 break
             tool_results = []
+            idle_requested = False
             for tool_call in message["tool_calls"]:
                 arguments = self.json_parser.parse(tool_call["arguments"])
-                output = self._exec(name, tool_call["name"], arguments)
+                try:
+                    if tool_call["name"] == "idle":
+                        idle_requested = True
+                        output = "Entering idle phase. Will poll for new tasks."
+                    else:
+                        output = self._exec(name, tool_call["name"], arguments)
+                except Exception as ex:
+                    output = f"[{name}] excute tool[{tool_call['name']}] error: {str(ex)}"
                 print(f"  [{name}] {tool_call['name']}: {str(output)}")
                 tool_results.append({
                     "role": "tool",
                     "tool_call_id": tool_call["id"],
                     "content": str(output)
                 })
-                if tool_call["name"] == "shutdown_response" and arguments.get("approve"):
-                    should_exit = True
             messages.extend(tool_results)
-        member = self._find_member(name)
-        if member:
-            member["status"] = "shutdown" if should_exit else "idle"
-            self._save_config()
+            if idle_requested:
+                break
+        self._set_status(name, "idle")
+        resume = False
+        polls = self.idle_timeout // max(self.poll_interval, 1)
+        for _ in range(polls):
+            time.sleep(self.poll_interval)
+            inbox = self.msg_bus.read_inbox(name)
+            if len(inbox) > 0:
+                for msg in inbox:
+                    if msg.get("type") == "shutdown_request":
+                        self._set_status(name, "shutdown")
+                        return
+                    messages.append({"role": "user", "content": self.json_parser.to_json_str(msg)})
+                resume = True
+                break
+            unclaimed = self.task_mgr.scan_unclaimed_tasks()
+            if unclaimed:
+                task = unclaimed[0]
+                self.task_mgr.claim_task(task["id"], name)
+                task_prompt = (
+                    f"<auto-claimed>Task #{task['id']}: {task['subject']}\n"
+                    f"{task.get('description', '')}</auto-claimed>"
+                )
+                if len(messages) <= 3:
+                    messages.insert(0, self.make_identity_block(name, role, team_name))
+                    messages.insert(1, {"role": "assistant", "content": f"I am {name}. Continuing."})
+                messages.append({"role": "user", "content": task_prompt})
+                messages.append({"role": "assistant", "content": f"Claimed task #{task['id']}. Working on it."})
+                resume = True
+                break
+        if not resume:
+            self._set_status(name, "shutdown")
+            return
+        self._set_status(name, "working")
 
     def _exec(self, sender: str, tool_name: str, args: dict) -> str:
         # these base tools are unchanged from s02
@@ -113,6 +161,8 @@ class TeamMgrBase(ModelOperator):
                 {"request_id": req_id, "plan": plan_text},
             )
             return f"Plan submitted (request_id={req_id}). Waiting for lead approval."
+        if tool_name == "claim_task":
+            return self.task_mgr.claim_task(args["task_id"], sender)
         return f"Unknown tool: {tool_name}"
     
     def _teammate_tools(self) -> list:
@@ -231,6 +281,31 @@ class TeamMgrBase(ModelOperator):
                             "plan": {"type": "string"}
                         }, 
                         "required": ["plan"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "idle", 
+                    "description": "Signal that you have no more work. Enters idle polling phase.",
+                    "parameters": {
+                        "type": "object", 
+                        "properties": {}
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "claim_task", 
+                    "description": "Claim a task from the task board by ID.",
+                    "parameters": {
+                        "type": "object", 
+                        "properties": {
+                            "task_id": {"type": "integer"}
+                        }, 
+                        "required": ["task_id"]
                     }
                 }
             }
