@@ -34,7 +34,7 @@ class ModelOperator:
         data = {
             "model_name": self.get_model_name(),
             "messages": history,
-            "stream": True,
+            "stream": self.get_stream(),
             "max_tokens": 8000,
             "index": -1,
             "tools": tools,

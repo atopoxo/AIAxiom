@@ -29,22 +29,158 @@ def detect_repo_root(cwd: Path) -> Path | None:
         return None
 
 WORKDIR = Path.cwd()
+REPO_ROOT = detect_repo_root(WORKDIR) or WORKDIR
 
 SYSTEM_TOOLS = SystemTools()
-SYSTEM_TOOLS.set_work_dir(WORKDIR)
 SKILL_LOADER = SkillLoader(WORKDIR)
 TASKS = TaskMgr(WORKDIR)
 BG = BackgroundMgr()
-BG.set_work_dir(WORKDIR)
 TODO = TodoManager()
 BUS = MsgBus(WORKDIR)
 TEAM = TeamMgr(WORKDIR)
-TEAM.set_msg_bus(BUS)
-TEAM.set_system_tools(SYSTEM_TOOLS)
-TEAM.set_task_mgr(TASKS)
-REPO_ROOT = detect_repo_root(WORKDIR) or WORKDIR
 EVENTS = EventBus(REPO_ROOT / ".worktrees" / "events.jsonl")
 WORKTREES = WorktreeMgr(REPO_ROOT, TASKS, EVENTS)
+
+TEAMMATE_HANDLERS = {
+    "bash":                 lambda **kw: SYSTEM_TOOLS.run_bash(kw["command"]),
+    "read_file":            lambda **kw: SYSTEM_TOOLS.run_read(kw["path"], kw.get("limit")),
+    "write_file":           lambda **kw: SYSTEM_TOOLS.run_write(kw["path"], kw["content"]),
+    "edit_file":            lambda **kw: SYSTEM_TOOLS.run_edit(kw["path"], kw["old_text"], kw["new_text"]),
+    "send_message":         lambda **kw: BUS.send(kw["sender"], kw["to"], kw["content"], kw.get("msg_type", "message")),
+    "read_inbox":           lambda **kw: json.dumps(BUS.read_inbox(kw["sender"]), indent=4),
+    "claim_task":           lambda **kw: TASKS.claim_task(kw["task_id"], kw["sender"]),
+    "task_list":            lambda **kw: TASKS.list_all()
+}
+
+TEAMMATE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "bash", 
+            "description": "Run a shell command.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "command": {"type": "string"}
+                }, 
+                "required": ["command"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file", 
+            "description": "Read file contents.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {"type": "string"}
+                }, 
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file", 
+            "description": "Write content to file.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {"type": "string"}, 
+                    "content": {"type": "string"}
+                }, 
+                "required": ["path", "content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "edit_file", 
+            "description": "Replace exact text in file.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "path": {"type": "string"}, 
+                    "old_text": {"type": "string"}, 
+                    "new_text": {"type": "string"}
+                }, 
+                "required": ["path", "old_text", "new_text"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_message", 
+            "description": "Send message to a teammate.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "sender": {"type": "string"}, 
+                    "to": {"type": "string"}, 
+                    "content": {"type": "string"}, 
+                    "msg_type": {"type": "string", "enum": list(BUS.get_valid_msg_types())}
+                },
+                "required": ["sender", "to", "content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_inbox", 
+            "description": "Read and drain your inbox.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "sender": {"type": "string"},
+                },
+                "required": ["sender"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "idle", 
+            "description": "Signal that you have no more work. Enters idle polling phase.",
+            "parameters": {
+                "type": "object", 
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "claim_task", 
+            "description": "Claim a task from the task board by ID.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "task_id": {"type": "integer"},
+                    "sender": {"type": "string"},
+                }, 
+                "required": ["task_id", "sender"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_list", 
+            "description": "List all tasks with status summary.",
+            "parameters": {
+                "type": "object", 
+                "properties": {}
+            }
+        }
+    }
+]
 
 TOOL_HANDLERS = {
     "task_create":          lambda **kw: TASKS.create(kw["subject"], kw.get("description", "")),
@@ -81,6 +217,7 @@ TOOL_HANDLERS = {
     "shutdown_response":    lambda **kw: TEAM.check_shutdown_status(kw.get("request_id", "")),
     "plan_approval":        lambda **kw: TEAM.handle_plan_review(kw["request_id"], kw["approve"], kw.get("feedback", "")),
     "idle":                 lambda **kw: "Lead does not idle.",
+    "sun_sub_agent":        lambda **kw: "Lead does not idle.",
 }
 
 CHILD_TOOLS = [
@@ -592,3 +729,10 @@ PARENT_TOOLS = CHILD_TOOLS
         }
     }
 ]
+
+SYSTEM_TOOLS.set_work_dir(WORKDIR)
+BG.set_work_dir(WORKDIR)
+TEAM.set_msg_bus(BUS)
+TEAM.set_task_mgr(TASKS)
+TEAM.set_tools(TEAMMATE_TOOLS)
+TEAM.set_tool_handlers(TEAMMATE_HANDLERS)

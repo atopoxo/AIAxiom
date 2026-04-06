@@ -5,9 +5,8 @@ class Coder(AgentBase):
     def __init__(self):
         super().__init__()
 
-    def loop(self, data: Any):
-        data["tools"] = self.get_tools()
-        data["model_name"] = self.get_model_name()
+    def loop(self, role: str, query: str):
+        data = self.get_model_contex(tools=self.get_tools(), query=query, prompt=self.get_system_prompt())
         model = self.get_model()
         tool_handlers = self.get_tool_handlers()
         messages = data["messages"]

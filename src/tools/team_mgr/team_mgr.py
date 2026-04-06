@@ -1,23 +1,76 @@
 import threading
 import uuid
 from pathlib import Path
-from tools.team_mgr.team_mgr_base import TeamMgrBase
 from tools.msg_bus.msg_bus import MsgBus
-from tools.system_tools.system_tools import SystemTools
+from agents.teammate.teammate import Teammate
+from core.model.base.model_base import ModelBase
+from core.json.json_parser import get_json_parser
 from tools.task_mgr.task_mgr import TaskMgr
 
-class TeamMgr(TeamMgrBase):
+class TeamMgr:
     def __init__(self, work_dir: Path):
-        super().__init__(work_dir)
+        self.json_parser = get_json_parser()
+        self.work_dir = work_dir / ".team"
+        self.work_dir.mkdir(exist_ok=True)
+        self.config_path = self.work_dir / "config.json"
+        self.config = self._load_config()
+        self.threads = {}
 
+    def _load_config(self) -> dict:
+        if self.config_path.exists():
+            return self.json_parser.parse(self.config_path.read_text())
+        return {"team_name": "default", "members": []}
+    
+    def _save_config(self):
+        self.config_path.write_text(self.json_parser.to_json_str(self.config, indent=4))
+
+    def _find_member(self, name: str) -> dict:
+        for m in self.config["members"]:
+            if m["name"] == name:
+                return m
+        return None
+    
+    def set_task_mgr(self, mgr: TaskMgr):
+        self.task_mgr = mgr
+
+    def get_task_mgr(self):
+        return self.task_mgr
+    
     def set_msg_bus(self, bus: MsgBus):
         self.msg_bus = bus
 
-    def set_system_tools(self, tools: SystemTools):
-        self.system_tools = tools
+    def get_msg_bus(self):
+        return self.msg_bus
 
-    def set_task_mgr(self, mgr: TaskMgr):
-        self.task_mgr = mgr
+    def get_model(self) -> ModelBase:
+        return self.model
+    
+    def set_model(self, model: ModelBase):
+        self.model = model
+    
+    def get_model_name(self) -> str:
+        return self.model_name
+    
+    def set_model_name(self, model_name: str):
+        self.model_name = model_name
+    
+    def get_stream(self) -> bool:
+        return self.stream
+    
+    def set_stream(self, stream: bool):
+        self.stream = stream
+    
+    def set_tools(self, tools: list):
+        self.tools = tools
+
+    def get_tools(self):
+        return self.tools
+    
+    def set_tool_handlers(self, tool_handlers: dict):
+        self.tool_handlers = tool_handlers
+
+    def get_tool_handlers(self) -> dict:
+        return self.tool_handlers
     
     def spawn(self, name: str, role: str, prompt: str) -> str:
         member = self._find_member(name)
@@ -30,9 +83,25 @@ class TeamMgr(TeamMgrBase):
             member = {"name": name, "role": role, "status": "working"}
             self.config["members"].append(member)
         self._save_config()
+
+        sys_prompt = (
+            f"You are '{name}', role: {role}, at {self.work_dir}. "
+            f"Use idle tool when you have no more work. You will auto-claim new tasks. You need to pass in_progress task."
+            f"You can only claim a task every times."
+            f"you must finish all the tasks if and only if all the tasks are done, then return <<<-done->>>"
+        )
+        teammate = Teammate(member)
+        teammate.set_system_prompt(sys_prompt)
+        teammate.set_model(self.get_model())
+        teammate.set_model_name(self.get_model_name())
+        teammate.set_stream(self.get_stream())
+        teammate.set_tool_handlers(self.get_tool_handlers())
+        teammate.set_tools(self.get_tools())
+        teammate.set_msg_bus(self.get_msg_bus())
+        teammate.set_task_mgr(self.get_task_mgr())
         thread = threading.Thread(
-            target=self._teammate_loop,
-            args=(name, role, prompt),
+            target=teammate.loop,
+            args=(self.config["team_name"], name, role, prompt),
             daemon=True,
         )
         self.threads[name] = thread
@@ -76,9 +145,3 @@ class TeamMgr(TeamMgrBase):
     def check_shutdown_status(self, request_id: str) -> str:
         with self.tracker_lock:
             return self.json_parser.to_json_str(self.shutdown_requests.get(request_id, {"error": "not found"}))
-    
-    def make_identity_block(self, name: str, role: str, team_name: str) -> dict:
-        return {
-            "role": "user",
-            "content": f"<identity>You are '{name}', role: {role}, team: {team_name}. Continue your work.</identity>",
-        }

@@ -2,6 +2,7 @@ from typing import Any
 from core.model.base.model_base import ModelBase
 from core.context_compress.context_compress import ContextCompression
 from core.model_operator.model_operator import ModelOperator
+from core.json.json_parser import get_json_parser
 
 class AgentBase(ModelOperator):
     def __init__(self):
@@ -9,6 +10,14 @@ class AgentBase(ModelOperator):
         self.tools = []
         self.tool_handlers = {}
         self.custom_finish_reason = None
+        self.system_prompt = None
+        self.json_parser = get_json_parser()
+    
+    def set_system_prompt(self, prompt: str):
+        self.system_prompt = prompt
+
+    def get_system_prompt(self) -> str:
+        return self.system_prompt
     
     def set_context_compress(self, context_compress: ContextCompression):
         self.context_compress = context_compress

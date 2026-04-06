@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from core.model.mgr.model_mgr import ModelMgr
 from organization.sub_agent_work import SubAgentWork
-from tools.tools import TEAM, PARENT_TOOLS, TOOL_HANDLERS
+from tools.tools import TEAM
 from core.context_compress.context_compress import ContextCompression
 
 custom_model_config = {
@@ -33,13 +33,6 @@ custom_model_config = {
 
 WORKDIR = Path.cwd()
 
-SYSTEM = ("You are a coding agent at {WORKDIR}. "
-    "Use task + worktree tools for multi-task work. "
-    "For parallel or risky changes: create tasks, allocate worktree lanes, "
-    "run commands in those lanes, then choose keep/remove for closeout. "
-    "Use worktree_events when you need lifecycle visibility.")
-SYSTEM  += "you must finish all the tasks if and only if all the tasks are done, then return <<<-done->>>"
-
 if __name__ == "__main__":
     history = []
     stream = True
@@ -56,8 +49,10 @@ if __name__ == "__main__":
     agent.set_model(model)
     agent.set_model_name(model_name)
     agent.set_context_compress(context_compress)
+    agent.set_stream(stream)
     TEAM.set_model(model)
     TEAM.set_model_name(model_name)
+    TEAM.set_stream(stream)
     
     while True:
         try:
@@ -66,20 +61,5 @@ if __name__ == "__main__":
             break
         if query.strip().lower() in ("q", "exit", ""):
             break
-        history.append({"role": "system", "content": SYSTEM})
-        history.append({"role": "user", "content": query})
-        data = {
-            "messages": history,
-            "stream": stream,
-            "max_tokens": 8000,
-            "index": -1,
-            "tool_choice": "auto",
-            "extra": {},
-        }
-        agent.loop(data)
-        response_content = history[-1]["content"]
-        if isinstance(response_content, list):
-            for block in response_content:
-                if hasattr(block, "text"):
-                    print(block.text)
+        agent.loop(query)
         print()
