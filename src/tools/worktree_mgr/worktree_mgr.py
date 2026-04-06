@@ -2,69 +2,14 @@ from pathlib import Path
 import subprocess
 import re
 import time
-from tools.task_mgr.task_mgr import TaskManager
+from tools.task_mgr.task_mgr import TaskMgr
 from tools.event_bus.event_bus import EventBus
 from core.json.json_parser import get_json_parser
+from tools.worktree_mgr.worktree_mgr_base import WorktreeMgrBase
 
-class WorktreeMgr:
-    def __init__(self, repo_root: Path, tasks: TaskManager, events: EventBus):
-        self.repo_root = repo_root
-        self.tasks = tasks
-        self.events = events
-        self.dir = repo_root / ".worktrees"
-        self.dir.mkdir(parents=True, exist_ok=True)
-        self.json_parser = get_json_parser()
-        self.index_path = self.dir / "index.json"
-        if not self.index_path.exists():
-            self.index_path.write_text(self.json_parser.to_json_str({"worktrees": []}, indent=4))
-        self.git_available = self._is_git_repo()
-
-    def _is_git_repo(self) -> bool:
-        try:
-            r = subprocess.run(
-                ["git", "rev-parse", "--is-inside-work-tree"],
-                cwd=self.repo_root,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            return r.returncode == 0
-        except Exception:
-            return False
-        
-    def _run_git(self, args: list[str]) -> str:
-        if not self.git_available:
-            raise RuntimeError("Not in a git repository. worktree tools require git.")
-        r = subprocess.run(
-            ["git", *args],
-            cwd=self.repo_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if r.returncode != 0:
-            msg = (r.stdout + r.stderr).strip()
-            raise RuntimeError(msg or f"git {' '.join(args)} failed")
-        return (r.stdout + r.stderr).strip() or "(no output)"
-    
-    def _load_index(self) -> dict:
-        return self.json_parser.parse(self.index_path.read_text())
-    
-    def _save_index(self, data: dict):
-        self.index_path.write_text(self.json_parser.to_json_str(data, indent=2))
-
-    def _find(self, name: str) -> dict | None:
-        idx = self._load_index()
-        for wt in idx.get("worktrees", []):
-            if wt.get("name") == name:
-                return wt
-        return None
-    
-    def _validate_name(self, name: str):
-        if not re.fullmatch(r"[A-Za-z0-9._-]{1,40}", name or ""):
-            raise ValueError(
-                "Invalid worktree name. Use 1-40 chars: letters, numbers, ., _, -"
-            )
+class WorktreeMgr(WorktreeMgrBase):
+    def __init__(self, work_dir: Path, tasks: TaskMgr, event_bus: EventBus):
+        super().__init__(work_dir, tasks=tasks, event_bus=event_bus)
         
     def create(self, name: str, task_id: int = None, base_ref: str = "HEAD") -> str:
         self._validate_name(name)
@@ -72,9 +17,9 @@ class WorktreeMgr:
             raise ValueError(f"Worktree '{name}' already exists in index")
         if task_id is not None and not self.tasks.exists(task_id):
             raise ValueError(f"Task {task_id} not found")
-        path = self.dir / name
-        branch = f"wt/{name}"
-        self.events.emit(
+        path = self.worktree_dir / name
+        branch = f"worktree/{name}"
+        self.event_bus.emit(
             "worktree.create.before",
             task={"id": task_id} if task_id is not None else {},
             worktree={"name": name, "base_ref": base_ref},
@@ -89,12 +34,12 @@ class WorktreeMgr:
                 "status": "active",
                 "created_at": time.time(),
             }
-            idx = self._load_index()
-            idx["worktrees"].append(entry)
-            self._save_index(idx)
+            idx_map = self._load_index()
+            idx_map["worktrees"].append(entry)
+            self._save_index(idx_map)
             if task_id is not None:
                 self.tasks.bind_worktree(task_id, name)
-            self.events.emit(
+            self.event_bus.emit(
                 "worktree.create.after",
                 task={"id": task_id} if task_id is not None else {},
                 worktree={
@@ -104,9 +49,9 @@ class WorktreeMgr:
                     "status": "active",
                 },
             )
-            return self.json_parser.to_json_str(entry, indent=2)
+            return self.json_parser.to_json_str(entry, indent=4)
         except Exception as e:
-            self.events.emit(
+            self.event_bus.emit(
                 "worktree.create.failed",
                 task={"id": task_id} if task_id is not None else {},
                 worktree={"name": name, "base_ref": base_ref},
@@ -115,24 +60,24 @@ class WorktreeMgr:
             raise
 
     def list_all(self) -> str:
-        idx = self._load_index()
-        wts = idx.get("worktrees", [])
-        if not wts:
+        idx_map = self._load_index()
+        worktrees = idx_map.get("worktrees", [])
+        if not worktrees:
             return "No worktrees in index."
         lines = []
-        for wt in wts:
-            suffix = f" task={wt['task_id']}" if wt.get("task_id") else ""
+        for worktree in worktrees:
+            suffix = f" task={worktree['task_id']}" if worktree.get("task_id") else ""
             lines.append(
-                f"[{wt.get('status', 'unknown')}] {wt['name']} -> "
-                f"{wt['path']} ({wt.get('branch', '-')}){suffix}"
+                f"[{worktree.get('status', 'unknown')}] {worktree['name']} -> "
+                f"{worktree['path']} ({worktree.get('branch', '-')}){suffix}"
             )
         return "\n".join(lines)
     
     def status(self, name: str) -> str:
-        wt = self._find(name)
-        if not wt:
+        worktree = self._find(name)
+        if not worktree:
             return f"Error: Unknown worktree '{name}'"
-        path = Path(wt["path"])
+        path = Path(worktree["path"])
         if not path.exists():
             return f"Error: Worktree path missing: {path}"
         r = subprocess.run(
@@ -149,10 +94,10 @@ class WorktreeMgr:
         dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
         if any(d in command for d in dangerous):
             return "Error: Dangerous command blocked"
-        wt = self._find(name)
-        if not wt:
+        worktree = self._find(name)
+        if not worktree:
             return f"Error: Unknown worktree '{name}'"
-        path = Path(wt["path"])
+        path = Path(worktree["path"])
         if not path.exists():
             return f"Error: Worktree path missing: {path}"
         try:
@@ -170,26 +115,26 @@ class WorktreeMgr:
             return "Error: Timeout (300s)"
         
     def remove(self, name: str, force: bool = False, complete_task: bool = False) -> str:
-        wt = self._find(name)
-        if not wt:
+        worktree = self._find(name)
+        if not worktree:
             return f"Error: Unknown worktree '{name}'"
-        self.events.emit(
+        self.event_bus.emit(
             "worktree.remove.before",
-            task={"id": wt.get("task_id")} if wt.get("task_id") is not None else {},
-            worktree={"name": name, "path": wt.get("path")},
+            task={"id": worktree.get("task_id")} if worktree.get("task_id") is not None else {},
+            worktree={"name": name, "path": worktree.get("path")},
         )
         try:
             args = ["worktree", "remove"]
             if force:
                 args.append("--force")
-            args.append(wt["path"])
+            args.append(worktree["path"])
             self._run_git(args)
-            if complete_task and wt.get("task_id") is not None:
-                task_id = wt["task_id"]
+            if complete_task and worktree.get("task_id") is not None:
+                task_id = worktree["task_id"]
                 before = self.json_parser.parse(self.tasks.get(task_id))
                 self.tasks.update(task_id, status="completed")
                 self.tasks.unbind_worktree(task_id)
-                self.events.emit(
+                self.event_bus.emit(
                     "task.completed",
                     task={
                         "id": task_id,
@@ -198,46 +143,46 @@ class WorktreeMgr:
                     },
                     worktree={"name": name},
                 )
-            idx = self._load_index()
-            for item in idx.get("worktrees", []):
+            idx_map = self._load_index()
+            for item in idx_map.get("worktrees", []):
                 if item.get("name") == name:
                     item["status"] = "removed"
                     item["removed_at"] = time.time()
-            self._save_index(idx)
-            self.events.emit(
+            self._save_index(idx_map)
+            self.event_bus.emit(
                 "worktree.remove.after",
-                task={"id": wt.get("task_id")} if wt.get("task_id") is not None else {},
-                worktree={"name": name, "path": wt.get("path"), "status": "removed"},
+                task={"id": worktree.get("task_id")} if worktree.get("task_id") is not None else {},
+                worktree={"name": name, "path": worktree.get("path"), "status": "removed"},
             )
             return f"Removed worktree '{name}'"
         except Exception as e:
-            self.events.emit(
+            self.event_bus.emit(
                 "worktree.remove.failed",
-                task={"id": wt.get("task_id")} if wt.get("task_id") is not None else {},
-                worktree={"name": name, "path": wt.get("path")},
+                task={"id": worktree.get("task_id")} if worktree.get("task_id") is not None else {},
+                worktree={"name": name, "path": worktree.get("path")},
                 error=str(e),
             )
             raise
 
     def keep(self, name: str) -> str:
-        wt = self._find(name)
-        if not wt:
+        worktree = self._find(name)
+        if not worktree:
             return f"Error: Unknown worktree '{name}'"
-        idx = self._load_index()
+        idx_map = self._load_index()
         kept = None
-        for item in idx.get("worktrees", []):
+        for item in idx_map.get("worktrees", []):
             if item.get("name") == name:
                 item["status"] = "kept"
                 item["kept_at"] = time.time()
                 kept = item
-        self._save_index(idx)
-        self.events.emit(
+        self._save_index(idx_map)
+        self.event_bus.emit(
             "worktree.keep",
-            task={"id": wt.get("task_id")} if wt.get("task_id") is not None else {},
+            task={"id": worktree.get("task_id")} if worktree.get("task_id") is not None else {},
             worktree={
                 "name": name,
-                "path": wt.get("path"),
+                "path": worktree.get("path"),
                 "status": "kept",
             },
         )
-        return self.json_parser.to_json_str(kept, indent=2) if kept else f"Error: Unknown worktree '{name}'"
+        return self.json_parser.to_json_str(kept, indent=4) if kept else f"Error: Unknown worktree '{name}'"

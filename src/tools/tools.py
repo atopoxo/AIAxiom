@@ -27,7 +27,6 @@ def detect_repo_root(cwd: Path) -> Path | None:
         return root if root.exists() else None
     except Exception:
         return None
-    
 
 WORKDIR = Path.cwd()
 
@@ -49,7 +48,7 @@ WORKTREES = WorktreeMgr(REPO_ROOT, TASKS, EVENTS)
 
 TOOL_HANDLERS = {
     "task_create":          lambda **kw: TASKS.create(kw["subject"], kw.get("description", "")),
-    "task_update":          lambda **kw: TASKS.update(kw["task_id"], kw.get("status"), kw.get("add_blocked_by"), kw.get("add_blocks")),
+    "task_update":          lambda **kw: TASKS.update(kw["task_id"], kw.get("status")),
     "task_list":            lambda **kw: TASKS.list_all(),
     "task_get":             lambda **kw: TASKS.get(kw["task_id"]),
     "task_bind_worktree":   lambda **kw: TASKS.bind_worktree(kw["task_id"], kw["worktree"], kw.get("owner", "")),
@@ -66,14 +65,17 @@ TOOL_HANDLERS = {
     "write_file":           lambda **kw: SYSTEM_TOOLS.run_write(kw["path"], kw["content"]),
     "edit_file":            lambda **kw: SYSTEM_TOOLS.run_edit(kw["path"], kw["old_text"], kw["new_text"]),
     "todo":                 lambda **kw: TODO.update(kw["items"]),
+    "todo_reminder":        lambda **kw: TODO.get_reminder(),
     "load_skill":           lambda **kw: SKILL_LOADER.get_content(kw["name"]),
     "compact":              lambda **kw: "Manual compression requested.",
+    "update_notifications": lambda **kw: BG.publish_notifications(kw["messages"]),
     "background_run":       lambda **kw: BG.run(kw["command"]),
     "check_background":     lambda **kw: BG.check(kw.get("task_id")),
     "spawn_teammate":       lambda **kw: TEAM.spawn(kw["name"], kw["role"], kw["prompt"]),
     "list_teammates":       lambda **kw: TEAM.list_all(),
     "send_message":         lambda **kw: BUS.send("lead", kw["to"], kw["content"], kw.get("msg_type", "message")),
-    "read_inbox":           lambda **kw: json.dumps(BUS.read_inbox("lead"), indent=2),
+    "read_inbox":           lambda **kw: json.dumps(BUS.read_inbox("lead"), indent=4),
+    "update_messages":      lambda **kw: BUS.publish_inbox_messages("lead", kw["messages"]),
     "broadcast":            lambda **kw: BUS.broadcast("lead", kw["content"], TEAM.member_names()),
     "shutdown_request":     lambda **kw: TEAM.handle_shutdown_request(kw["teammate"]),
     "shutdown_response":    lambda **kw: TEAM.check_shutdown_status(kw.get("request_id", "")),
@@ -109,14 +111,6 @@ CHILD_TOOLS = [
                     "status": {
                         "type": "string", 
                         "enum": ["pending", "in_progress", "completed"]
-                    }, 
-                    "add_blocked_by": {
-                        "type": "array", 
-                        "items": {"type": "integer"}
-                    }, 
-                    "add_blocks": {
-                        "type": "array", 
-                        "items": {"type": "integer"}
                     }
                 }, 
                 "required": ["task_id"]
@@ -340,6 +334,15 @@ CHILD_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "todo_reminder", 
+            "description": "If the rounds is exceeded 3 times, then call this function to remind the user.",
+            "parameters": {
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "todo", 
             "description": "Update task list. Track progress on multi-step tasks.",
             "parameters": {
@@ -392,6 +395,20 @@ CHILD_TOOLS = [
                         "description": "What to preserve in the summary"
                     }
                 }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_notifications", 
+            "description": "Return and clear all pending completion notifications, then update the context.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "command": {"type": "string"}
+                }, 
+                "required": ["command"]
             }
         }
     },
@@ -478,6 +495,17 @@ CHILD_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "update_messages", 
+            "description": "Read and drain the lead's inbox then update the context.",
+            "parameters": {
+                "type": "object", 
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "broadcast", 
             "description": "Send a message to all teammates.",
             "parameters": {
@@ -547,20 +575,20 @@ CHILD_TOOLS = [
 ]
 
 PARENT_TOOLS = CHILD_TOOLS
-# [
-#     {
-#         "type": "function",
-#         "function": {
-#             "name": "task", 
-#             "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
-#             "parameters": {
-#                 "type": "object", 
-#                 "properties": {
-#                     "prompt": {"type": "string"}, 
-#                     "description": {"type": "string", "description": "Short description of the task"}
-#                 }, 
-#                 "required": ["prompt"]
-#             }
-#         }
-#     }
-# ]
+[
+    {
+        "type": "function",
+        "function": {
+            "name": "create_agent", 
+            "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "prompt": {"type": "string"}, 
+                    "description": {"type": "string", "description": "Short description of the task"}
+                }, 
+                "required": ["prompt"]
+            }
+        }
+    }
+]

@@ -62,7 +62,7 @@ class ContextCompression(ContextCompressBase):
             {conversation_text}
         """
         data = self.get_model_contex(sub_tools=[], query=query, prompt=None)
-        message = self.get_model_result(data)
+        message, response = self.get_model_result(data)
         summary = message["conclusion"]
         return [
             {"role": "user", "content": f"[Conversation compressed. Transcript: {transcript_path}]\n\n{summary}"},

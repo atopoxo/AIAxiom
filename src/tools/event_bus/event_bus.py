@@ -19,7 +19,7 @@ class EventBus:
     ):
         payload = {
             "event": event,
-            "ts": time.time(),
+            "timestamp": time.time(),
             "task": task or {},
             "worktree": worktree or {},
         }
@@ -38,4 +38,4 @@ class EventBus:
                 items.append(self.json_parser.parse(line))
             except Exception:
                 items.append({"event": "parse_error", "raw": line})
-        return self.json_parser.to_json_str(items, indent=2)
+        return self.json_parser.to_json_str(items, indent=4)

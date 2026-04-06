@@ -23,7 +23,7 @@ class MsgBus:
         if inbox:
             messages.append({
                 "role": "user",
-                "content": f"<inbox>{self.json_parser.to_json_str(inbox, indent=2)}</inbox>",
+                "content": f"<inbox>{self.json_parser.to_json_str(inbox, indent=4)}</inbox>",
             })
             messages.append({
                 "role": "assistant",

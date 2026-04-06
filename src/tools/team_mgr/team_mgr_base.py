@@ -61,7 +61,7 @@ class TeamMgrBase(ModelOperator):
                     self._set_status(name, "shutdown")
                     return
                 messages.append({"role": "user", "content": self.json_parser.to_json_str(msg)})
-            message = self.get_model_result(data)
+            message, response = self.get_model_result(data)
             if not message:
                 self._set_status(name, "idle")
                 break

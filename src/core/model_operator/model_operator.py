@@ -42,15 +42,10 @@ class ModelOperator:
             "extra": {},
         }
         return data
-    
-    def is_finish(self, message: str, is_subagent: bool = False):
-        if is_subagent:
-            return "<<<-subagent-done->>>" in message["conclusion"]
-        else:
-            return "<<<-done->>>" in message["conclusion"]
         
     def get_model_result(self, data: Any):
         message = None
+        last_trunk = None
         model = self.get_model()
         stream = self.get_stream()
         try:
@@ -64,8 +59,10 @@ class ModelOperator:
             if stream:
                 for chunk in response:
                     model.message_update(message, stream, chunk=chunk)
+                    last_trunk = chunk
             else:
                 message = model.message_update(message, stream, chunk=response)
+                last_trunk = response
         except Exception as ex:
             print(f"model return error: {ex}")
-        return message
+        return message, last_trunk

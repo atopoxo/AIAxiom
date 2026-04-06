@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from core.model.mgr.model_mgr import ModelMgr
 from core.auto_agent.auto_agent import AutoAgent
-from tools.tools import TEAM
+from tools.tools import TEAM, PARENT_TOOLS, TOOL_HANDLERS
 from core.context_compress.context_compress import ContextCompression
 
 custom_model_config = {
@@ -33,11 +33,12 @@ custom_model_config = {
 
 WORKDIR = Path.cwd()
 
-SYSTEM = f"You are a team lead at {WORKDIR}. Spawn teammates and communicate via inboxes."
+SYSTEM = ("You are a coding agent at {WORKDIR}. "
+    "Use task + worktree tools for multi-task work. "
+    "For parallel or risky changes: create tasks, allocate worktree lanes, "
+    "run commands in those lanes, then choose keep/remove for closeout. "
+    "Use worktree_events when you need lifecycle visibility.")
 SYSTEM  += "you must finish all the tasks if and only if all the tasks are done, then return <<<-done->>>"
-
-SUBAGENT_SYSTEM = f"You are a coding subagent at {WORKDIR}. Complete the given task, then summarize your findings."
-SUBAGENT_SYSTEM  += "if all the tasks are done, then return <<<-subagent-done->>>"
 
 if __name__ == "__main__":
     history = []
@@ -51,10 +52,9 @@ if __name__ == "__main__":
     context_compress.set_model_name(model_name)
     context_compress.set_stream(stream)
     context_compress.set_threshold(50000)
-    agent = AutoAgent()
+    agent = AutoAgent(WORKDIR)
     agent.set_model(model)
     agent.set_model_name(model_name)
-    agent.set_subagent_prompt(SUBAGENT_SYSTEM)
     agent.set_context_compress(context_compress)
     TEAM.set_model(model)
     TEAM.set_model_name(model_name)

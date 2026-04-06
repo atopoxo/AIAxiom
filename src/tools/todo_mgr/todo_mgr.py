@@ -34,3 +34,6 @@ class TodoManager:
         done = sum(1 for t in self.items if t["status"] == "completed")
         lines.append(f"\n({done}/{len(self.items)} completed)")
         return "\n".join(lines)
+    
+    def get_reminder(self) -> str:
+        return "<reminder>Update your todos.</reminder>"

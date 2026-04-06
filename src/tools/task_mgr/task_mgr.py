@@ -1,6 +1,5 @@
 from pathlib import Path
 import time
-from core.json.json_parser import get_json_parser
 from tools.task_mgr.task_mgr_base import TaskMgrBase
 
 class TaskMgr(TaskMgrBase):
