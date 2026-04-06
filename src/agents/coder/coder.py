@@ -1,5 +1,5 @@
 from typing import Any
-from core.auto_agent.auto_agent_base import AgentBase
+from core.agent_base.agent_base import AgentBase
 
 class Coder(AgentBase):
     def __init__(self):

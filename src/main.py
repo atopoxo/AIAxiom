@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from core.model.mgr.model_mgr import ModelMgr
-from core.auto_agent.auto_agent import AutoAgent
+from organization.sub_agent_work import SubAgentWork
 from tools.tools import TEAM, PARENT_TOOLS, TOOL_HANDLERS
 from core.context_compress.context_compress import ContextCompression
 
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     context_compress.set_model_name(model_name)
     context_compress.set_stream(stream)
     context_compress.set_threshold(50000)
-    agent = AutoAgent(WORKDIR)
+    agent = SubAgentWork(WORKDIR)
     agent.set_model(model)
     agent.set_model_name(model_name)
     agent.set_context_compress(context_compress)

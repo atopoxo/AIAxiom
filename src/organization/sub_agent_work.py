@@ -2,10 +2,9 @@ from typing import Any
 from pathlib import Path
 from tools.tools import TOOL_HANDLERS, CHILD_TOOLS, PARENT_TOOLS
 from core.context_compress.context_compress import ContextCompression
-from core.auto_agent.auto_agent_base import AutoAgentBase
 from agents.coder.coder import Coder
 
-class AutoAgent(AutoAgentBase):
+class SubAgentWork:
     def __init__(self, work_dir: Path):
         self.work_dir = work_dir
         self.main_coder = Coder()
